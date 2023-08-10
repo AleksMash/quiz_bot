@@ -1,40 +1,36 @@
 import datetime as dt
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 
 
 # some constants
-CURRENT_STATE, INPUT_STEP, LAST_STEP, INPUT_DATA, CANCEL_INPUT = range(5)
+CURRENT_BUTTON, CURRENT_STEP, LAST_STEP,\
+INPUT_DATA, CANCEL_INPUT, CURRENT_STAGE, NEXT_STAGE = map(str, range(7))
 
 # stages
-WAIT_FOR_BUTTONS, INPUT_USER_INFO = map(lambda x: 'stage_'+chr(x), range(2))
+SELECT_ACTION = 1        # waiting for user clicks any of replymarkup button
+ANY_TEXT_INPUT = 2       # waiting for user text input
+
+# reply buttons
+NEW_QUESTION = 'Новый вопрос'
+GIVE_UP = 'Сдаться'
+RATE = 'Мой счет'
+TEMP = 'тест-кнопка'
+
 
 # callback button data base name (and some of them are stages also - see main())
-
-
-# input steps for handling user input step by step with type checking
-# input_steps = {
-#     NEW_EVENT:{
-#         'last_step':3,
-#         0:('Введите тему митапа', str),
-#         1:('Введите описание бота', str),
-#         2:('Введите дату начала', dt.date.fromisoformat),
-#         3:('Введите дату окончания', dt.date.fromisoformat)
-#     }
-# }
-
-# keyboards with static callback data
-
 
 # Cancel button for cancelling input
 CANCEL_MARKUP = InlineKeyboardMarkup.from_button(InlineKeyboardButton('Отмена', callback_data=CANCEL_INPUT))
 
-
 # replymarkups
 COMMON_REPLY_BUTTONS = ReplyKeyboardMarkup(
-    [['Новый вопрос', 'Сдаться'],
-     ['Мой счет']]
+    [[NEW_QUESTION, GIVE_UP],
+     [RATE, TEMP]]
 )
+
+#input steps for reply buttons (including type converter)
+INPUT_STEPS = {}
 
 # help inforamtion (now used as a plug for not finished functions)
 # help_info ={
