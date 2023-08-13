@@ -43,7 +43,7 @@ def start(event, vk_api, text=None):
 def ask_question(event, vk_api):
     current_stage = cache[event.user_id][CURRENT_STAGE]
     if current_stage == Stages.TRY_AGAIN_YES_OR_NO:
-        question = db.fetch_random_question()
+        question = cache[event.user_id][CURRENT_QA]
         msg_text = 'Повторяю вопрос\n\n:' + question['q']
     else:
         question = db.fetch_random_question()
