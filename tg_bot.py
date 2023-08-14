@@ -1,115 +1,123 @@
-from datetime import datetime
+import os, json, random
 
-from environs import Env
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+import redis
+
+from dotenv import load_dotenv
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import (Updater, CommandHandler, MessageHandler, Filters, CallbackContext,
                           ConversationHandler, CallbackQueryHandler)
+
 # lib for fuzzy comparing answer vs question
 from fuzzywuzzy import fuzz
 
-import db
-import tg_bot_settings as bs
+
+# data elements for saving in callback context
+INPUT_DATA = 1
+CURRENT_STAGE = 2
+
+# conversation stages
+SELECT_ACTION = 1       # waiting for user clicks any of replymarkup button
+ANSWER_QUESTION = 2     # waiting for user answer
+YES_OR_NO_REPEAT = 3    # wait for user choice to continue or not answering
+
+# reply buttons
+NEW_QUESTION = 'Новый вопрос'
+GIVE_UP = 'Сдаться'
+RATE = 'Мой счет'
+YES = 'Да'
+NO = 'Нет'
+
+#callback buttons data
+CANCEL_INPUT = 'cancel'
+
+# Cancel button for cancelling input
+CANCEL_MARKUP = InlineKeyboardMarkup.from_button(InlineKeyboardButton('Отмена', callback_data=CANCEL_INPUT))
+
+# replymarkups
+KEYBOARD_START = ReplyKeyboardMarkup(
+    [[NEW_QUESTION, GIVE_UP]]
+)
+
+KEYBOARD_YES_NO = ReplyKeyboardMarkup(
+    [[YES, NO]]
+)
+
+redis_db: redis.Redis
+
+with open('quiz.json', 'r', encoding='UTF-8') as file:
+    questions: list = list(json.load(file).values())
 
 
-env = Env()
-env.read_env()
-
-
-def process_input_data(user_id, user_data, update: Update):
-    if user_data[bs.CURRENT_STAGE] == bs.ANSWER_QUESTION:
-        right_answer = user_data[bs.CURRENT_QUESTION]['a']
-        user_answer = user_data[bs.INPUT_DATA][0]
+def process_user_answer(update: Update, context: CallbackContext):
+    if context.user_data[CURRENT_STAGE] == ANSWER_QUESTION:
+        right_answer =  redis_db.get(f'{update.message.from_user.id}_a')
         # Вес 70 применен эмпирически
-        if fuzz.WRatio(user_answer, right_answer)>=70:
+        if fuzz.WRatio(update.message.text, right_answer)>=70:
             update.message.reply_text("Правильно! Поздравляю! Для следующего вопроса нажми \"Новый вопрос\"",
-                                    reply_markup=bs.KB_START)
-            return bs.SELECT_ACTION
+                                      reply_markup=KEYBOARD_START)
+            return SELECT_ACTION
         else:
-            update.message.reply_text("Ответ неверный. Хотите попробовать ответить еще раз?", reply_markup=bs.KB_YES_NO)
-            return bs.YES_OR_NO_REPEAT
+            update.message.reply_text("Ответ неверный. Хотите попробовать ответить еще раз?", reply_markup=KEYBOARD_YES_NO)
+            return YES_OR_NO_REPEAT
 
 
 def start(update: Update, context: CallbackContext):
-    update.message.reply_text("Выбери действие", reply_markup=bs.KB_START)
-    return bs.SELECT_ACTION
+    update.message.reply_text("Выбери действие", reply_markup=KEYBOARD_START)
+    return SELECT_ACTION
 
 
 def new_question(update: Update, context: CallbackContext):
-    question = db.fetch_random_question()
-    context.user_data[bs.CURRENT_STAGE] = bs.ANSWER_QUESTION
-    context.user_data[bs.NEXT_STAGE] = bs.SELECT_ACTION
-    context.user_data[bs.CURRENT_STEP] = 0
-    context.user_data[bs.CURRENT_QUESTION] = question
-    context.user_data[bs.LAST_STEP] = len(bs.INPUT_STEPS[bs.ANSWER_QUESTION])-1
-    context.user_data[bs.INPUT_DATA] = []
+    question = random.choice(questions)
+    context.user_data[CURRENT_STAGE] = ANSWER_QUESTION
     update.message.reply_text(question['q'])
-    update.message.reply_text(bs.INPUT_STEPS[bs.ANSWER_QUESTION][0][0], reply_markup=bs.CANCEL_MARKUP)
-    return bs.ANSWER_QUESTION
+    update.message.reply_text('Введите  ответ', reply_markup=CANCEL_MARKUP)
+    redis_db.set(f'{update.message.from_user.id}_q', question['q'])
+    redis_db.set(f'{update.message.from_user.id}_a', question['a'])
+    return ANSWER_QUESTION
 
 
 def repeat_question(update: Update, context: CallbackContext):
-    update.message.reply_text('Повторяю вопрос: \n\n'+ context.user_data[bs.CURRENT_QUESTION]['q'],
-                              reply_markup=bs.KB_START)
-    update.message.reply_text(bs.INPUT_STEPS[bs.ANSWER_QUESTION][0][0], reply_markup=bs.CANCEL_MARKUP)
-    return bs.ANSWER_QUESTION
+    question = redis_db.get(f'{update.message.from_user.id}_q').decode('UTF-8')
+    update.message.reply_text(f'Повторяю вопрос:\n\n{question}', reply_markup=KEYBOARD_START)
+    update.message.reply_text('Введите  ответ', reply_markup=CANCEL_MARKUP)
+    return ANSWER_QUESTION
 
 
 def give_up(update: Update, context: CallbackContext):
-    update.message.reply_text('Правильный ответ таков:\n\n' + context.user_data[bs.CURRENT_QUESTION]['a'])
-    return bs.SELECT_ACTION
-
-
-def get_user_text(update: Update, context: CallbackContext):
-    current_step = context.user_data[bs.CURRENT_STEP]
-    current_stage = context.user_data[bs.CURRENT_STAGE]
-    checker = bs.INPUT_STEPS[current_stage][current_step][1]
-    if not checker is str:
-        try:
-            input_checked = checker(update.message.text)
-        except (ValueError, TypeError):
-            update.message.reply_text('Вы ввели неверное значение./n', reply_markup=bs.CANCEL_MARKUP)
-            return context.user_data[bs.CURRENT_STAGE]
-    else:
-        input_checked = update.message.text
-
-    context.user_data[bs.INPUT_DATA].append(input_checked)
-
-    if not current_step == context.user_data[bs.LAST_STEP]:
-        current_step += 1
-        context.user_data[bs.CURRENT_STEP] = current_step
-        next_msg = bs.INPUT_STEPS[current_stage][current_step][0]
-        update.message.reply_text(next_msg, reply_markup=bs.CANCEL_MARKUP)
-        return context.user_data[bs.CURRENT_STAGE]
-
-    return process_input_data(update.message.from_user.id, context.user_data, update)
+    right_answer = redis_db.get(f'{update.message.from_user.id}_a').decode('UTF-8')
+    update.message.reply_text(f'Правильный ответ таков:\n\n{right_answer}')
+    return SELECT_ACTION
 
 
 def cancel_input(update: Update, context: CallbackContext):
     query = update.callback_query
     query.answer()
     context.user_data.clear
-    query.message.reply_text('Ввод данных отменен', reply_markup=bs.KB_START)
-    return bs.SELECT_ACTION
+    query.message.reply_text('Ввод данных отменен', reply_markup=KEYBOARD_START)
+    return SELECT_ACTION
 
 
 def main():
-    updater = Updater(env.str('TG_BOT_TOKEN'))
+    load_dotenv()
+    global redis_db
+    redis_db =  redis.Redis(host=os.environ['REDIS_HOST'], port=os.environ['REDIS_PORT'], password=os.environ['REDIS_PASSWORD'])
+    updater = Updater(os.environ['TG_BOT_TOKEN'])
     dispatcher = updater.dispatcher
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
-            bs.SELECT_ACTION:[
-                MessageHandler(filters=Filters.text([bs.NEW_QUESTION]), callback=new_question),
+            SELECT_ACTION:[
+                MessageHandler(filters=Filters.text([NEW_QUESTION]), callback=new_question),
             ],
-            bs.ANSWER_QUESTION:[
-                MessageHandler(filters=Filters.text([bs.GIVE_UP]), callback=give_up),
-                MessageHandler(filters=None, callback=get_user_text),
-                CallbackQueryHandler(cancel_input, pattern=bs.CANCEL_INPUT)
+            ANSWER_QUESTION:[
+                MessageHandler(filters=Filters.text([GIVE_UP]), callback=give_up),
+                MessageHandler(filters=None, callback=process_user_answer),
+                CallbackQueryHandler(cancel_input, pattern=CANCEL_INPUT)
             ],
-            bs.YES_OR_NO_REPEAT:[
-                MessageHandler(filters=Filters.text([bs.NO]), callback=start),
-                MessageHandler(filters=Filters.text([bs.YES]), callback=repeat_question)
+            YES_OR_NO_REPEAT:[
+                MessageHandler(filters=Filters.text([NO]), callback=start),
+                MessageHandler(filters=Filters.text([YES]), callback=repeat_question)
             ]
         },
         fallbacks=[CommandHandler('start', start)],
