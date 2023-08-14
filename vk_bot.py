@@ -109,17 +109,17 @@ def process_answer(event, vk_api):
 
 def give_up(event, vk_api):
     right_answer = get_user_cache(event.user_id, RIGHT_ANSWER)
-    send_message(event, vk_api, f'Правильный ответ:\n{right_answer}')
+    send_message(event, vk_api, f'Правильный ответ:\n\n{right_answer}')
     return start(event, vk_api)
 
 
 def send_message(event, vk_api, text):
-    current_keyboard = get_user_cache(event.user_id, CURRENT_KEYBOARD)
+    current_keyboard = int(get_user_cache(event.user_id, CURRENT_KEYBOARD))
     vk_api.messages.send(
         user_id=event.user_id,
         message=text,
         random_id=random.randint(1, 1000),
-        keyboard=current_keyboard
+        keyboard=KEYBOARDS[current_keyboard]
     )
 
 
