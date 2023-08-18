@@ -32,20 +32,20 @@ KEYBOARD_MAIN = 1
 KEYBOARD_GIVE_UP = 2
 KEYBOARD_YES_NO = 3
 
-keyb_main: VkKeyboard = VkKeyboard(one_time=True)
-keyb_main.add_button(Commands.ASK_QUESTION, color=VkKeyboardColor.PRIMARY)
+keyboard_main: VkKeyboard = VkKeyboard(one_time=True)
+keyboard_main.add_button(Commands.ASK_QUESTION, color=VkKeyboardColor.PRIMARY)
 
-keyb_give_up: VkKeyboard = VkKeyboard(one_time=True)
-keyb_give_up.add_button(Commands.GIVE_UP, color=VkKeyboardColor.NEGATIVE)
+keyboard_give_up: VkKeyboard = VkKeyboard(one_time=True)
+keyboard_give_up.add_button(Commands.GIVE_UP, color=VkKeyboardColor.NEGATIVE)
 
-keyb_yes_no: VkKeyboard = VkKeyboard(one_time=True)
-keyb_yes_no.add_button(Commands.TRY_AGAIN_YES, color=VkKeyboardColor.POSITIVE)
-keyb_yes_no.add_button(Commands.TRY_AGAIN_NO, color=VkKeyboardColor.NEGATIVE)
+keyboard_yes_no: VkKeyboard = VkKeyboard(one_time=True)
+keyboard_yes_no.add_button(Commands.TRY_AGAIN_YES, color=VkKeyboardColor.POSITIVE)
+keyboard_yes_no.add_button(Commands.TRY_AGAIN_NO, color=VkKeyboardColor.NEGATIVE)
 
 KEYBOARDS = {
-    KEYBOARD_MAIN: keyb_main.get_keyboard(),
-    KEYBOARD_GIVE_UP: keyb_give_up.get_keyboard(),
-    KEYBOARD_YES_NO: keyb_yes_no.get_keyboard()
+    KEYBOARD_MAIN: keyboard_main.get_keyboard(),
+    KEYBOARD_GIVE_UP: keyboard_give_up.get_keyboard(),
+    KEYBOARD_YES_NO: keyboard_yes_no.get_keyboard()
 }
 
 
