@@ -5,7 +5,7 @@ import redis
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import (Updater, CommandHandler, MessageHandler, Filters, CallbackContext,
-                          ConversationHandler, CallbackQueryHandler)
+                          ConversationHandler, CallbackQueryHandler, Dispatcher)
 
 # lib for fuzzy comparing answer vs question
 from fuzzywuzzy import fuzz
@@ -42,15 +42,10 @@ KEYBOARD_YES_NO = ReplyKeyboardMarkup(
     [[YES, NO]]
 )
 
-redis_db: redis.Redis
-
-with open('quiz.json', 'r', encoding='UTF-8') as file:
-    questions: list = list(json.load(file).values())
-
 
 def process_user_answer(update: Update, context: CallbackContext):
     if context.user_data[CURRENT_STAGE] == ANSWER_QUESTION:
-        right_answer =  redis_db.get(f'{update.message.from_user.id}_a')
+        right_answer = context.bot_data['redis'].get(f'{update.message.from_user.id}_a')
         # Вес 70 применен эмпирически
         if fuzz.WRatio(update.message.text, right_answer)>=70:
             update.message.reply_text("Правильно! Поздравляю! Для следующего вопроса нажми \"Новый вопрос\"",
@@ -67,24 +62,24 @@ def start(update: Update, context: CallbackContext):
 
 
 def new_question(update: Update, context: CallbackContext):
-    question = random.choice(questions)
+    question = random.choice(context.bot_data['questions'])
     context.user_data[CURRENT_STAGE] = ANSWER_QUESTION
     update.message.reply_text(question['q'])
     update.message.reply_text('Введите  ответ', reply_markup=CANCEL_MARKUP)
-    redis_db.set(f'{update.message.from_user.id}_q', question['q'])
-    redis_db.set(f'{update.message.from_user.id}_a', question['a'])
+    context.bot_data['redis'].set(f'{update.message.from_user.id}_q', question['q'])
+    context.bot_data['redis'].set(f'{update.message.from_user.id}_a', question['a'])
     return ANSWER_QUESTION
 
 
 def repeat_question(update: Update, context: CallbackContext):
-    question = redis_db.get(f'{update.message.from_user.id}_q').decode('UTF-8')
+    question = context.bot_data['redis'].get(f'{update.message.from_user.id}_q').decode('UTF-8')
     update.message.reply_text(f'Повторяю вопрос:\n\n{question}', reply_markup=KEYBOARD_START)
     update.message.reply_text('Введите  ответ', reply_markup=CANCEL_MARKUP)
     return ANSWER_QUESTION
 
 
 def give_up(update: Update, context: CallbackContext):
-    right_answer = redis_db.get(f'{update.message.from_user.id}_a').decode('UTF-8')
+    right_answer = context.bot_data['redis'].get(f'{update.message.from_user.id}_a').decode('UTF-8')
     update.message.reply_text(f'Правильный ответ таков:\n\n{right_answer}')
     return SELECT_ACTION
 
@@ -99,10 +94,14 @@ def cancel_input(update: Update, context: CallbackContext):
 
 def main():
     load_dotenv()
-    global redis_db
-    redis_db =  redis.Redis(host=os.environ['REDIS_HOST'], port=os.environ['REDIS_PORT'], password=os.environ['REDIS_PASSWORD'])
     updater = Updater(os.environ['TG_BOT_TOKEN'])
-    dispatcher = updater.dispatcher
+    dispatcher: Dispatcher = updater.dispatcher
+
+    with open('quiz.json', 'r', encoding='UTF-8') as file:
+        dispatcher.bot_data['questions'] = list(json.load(file).values())
+
+    dispatcher.bot_data['redis'] = redis.Redis(host=os.environ['REDIS_HOST'],
+                                               port=os.environ['REDIS_PORT'], password=os.environ['REDIS_PASSWORD'])
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
