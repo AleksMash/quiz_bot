@@ -144,13 +144,11 @@ def main():
                 redis_db.set(f'{event.user_id}_{CURRENT_STAGE}',current_stage)
                 continue
             stage_callbacks = callbacks.get(current_stage)
-            print(current_stage)
             if not stage_callbacks:
                 current_stage = start(event, vk_api, text="Упс! Нет обработчиков для текущего шага."
                                                            " Передай это сообщение разработчику. А пока попробуем"
                                                            " начать все сначала\n"
                                                            "Выбери действие:", redis_db=redis_db)
-                print(current_stage)
                 redis_db.set(f'{event.user_id}_{CURRENT_STAGE}', current_stage)
                 continue
             func = stage_callbacks.get(event.text)
