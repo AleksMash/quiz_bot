@@ -49,7 +49,7 @@ KEYBOARDS = {
 }
 
 
-def start(event, vk_api, questions, redis_db, text=None):
+def start(event, vk_api, redis_db, text=None, questions=None):
     vk_api.messages.send(
         user_id=event.user_id,
         message=text if text else 'Выбери действие',
@@ -61,7 +61,7 @@ def start(event, vk_api, questions, redis_db, text=None):
 
 
 def ask_question(event, vk_api, questions, redis_db):
-    current_stage = redis_db.get(f'{event.user_id}_{CURRENT_STAGE}').decode('UTF-8')
+    current_stage = int(redis_db.get(f'{event.user_id}_{CURRENT_STAGE}').decode('UTF-8'))
     if current_stage == Stages.TRY_AGAIN_YES_OR_NO:
         question = redis_db.get(f'{event.user_id}_{QUESTION}').decode('UTF-8')
         msg_text = f'Повторяю вопрос\n\n:{question}'
@@ -81,9 +81,10 @@ def ask_question(event, vk_api, questions, redis_db):
 
 
 def process_answer(event, vk_api, questions, redis_db):
-    question = redis_db.get(f'{event.user_id}_{QUESTION}')
+    question = redis_db.get(f'{event.user_id}_{QUESTION}').decode('UTF-8')
     if fuzz.WRatio(question, event.text) >= 70:
-        return start(event, vk_api, 'Все верно! Для нового вопроса нажми кнопку "Новый вопрос"')
+        return start(event, vk_api, text='Все верно! Для нового вопроса нажми кнопку "Новый вопрос"',
+                     redis_db=redis_db)
     vk_api.messages.send(
         user_id=event.user_id,
         message='Ответ неверный! Хотите попробовать ответить еще раз?',
@@ -95,13 +96,13 @@ def process_answer(event, vk_api, questions, redis_db):
 
 
 def give_up(event, vk_api, questions, redis_db):
-    right_answer = redis_db.get(f'{event.user_id}_{RIGHT_ANSWER}')
+    right_answer = redis_db.get(f'{event.user_id}_{RIGHT_ANSWER}').decode('UTF-8')
     send_message(event, vk_api, f'Правильный ответ:\n\n{right_answer}', redis_db)
-    return start(event, vk_api, questions, redis_db)
+    return start(event, vk_api, redis_db=redis_db)
 
 
 def send_message(event, vk_api, text, redis_db):
-    current_keyboard = redis_db.get(f'{event.user_id}_{CURRENT_KEYBOARD}')
+    current_keyboard = int(redis_db.get(f'{event.user_id}_{CURRENT_KEYBOARD}').decode('UTF-8'))
     vk_api.messages.send(
         user_id=event.user_id,
         message=text,
@@ -137,17 +138,19 @@ def main():
     # start message listening
     for event in longpoll.listen():
         if event.type == VkEventType.MESSAGE_NEW and event.to_me:
-            current_stage = redis_db.get(f'{event.user_id}_{CURRENT_STAGE}')
+            current_stage = int(redis_db.get(f'{event.user_id}_{CURRENT_STAGE}').decode('UTF-8'))
             if not current_stage:
                 current_stage = start(event, vk_api, text='Выбери действие:', redis_db=redis_db)
                 redis_db.set(f'{event.user_id}_{CURRENT_STAGE}',current_stage)
                 continue
             stage_callbacks = callbacks.get(current_stage)
+            print(current_stage)
             if not stage_callbacks:
                 current_stage = start(event, vk_api, text="Упс! Нет обработчиков для текущего шага."
                                                            " Передай это сообщение разработчику. А пока попробуем"
                                                            " начать все сначала\n"
                                                            "Выбери действие:", redis_db=redis_db)
+                print(current_stage)
                 redis_db.set(f'{event.user_id}_{CURRENT_STAGE}', current_stage)
                 continue
             func = stage_callbacks.get(event.text)
@@ -157,7 +160,8 @@ def main():
                     send_message(event, vk_api, 'Команда не распознана или не активна на текущем шаге.'
                                                 ' Выбери другую кнопку', redis_db)
                     continue
-            redis_db.set(f'{event.user_id}_{CURRENT_STAGE}', func(event, vk_api, questions, redis_db))
+            redis_db.set(f'{event.user_id}_{CURRENT_STAGE}', func(event, vk_api,
+                                                                  questions=questions, redis_db=redis_db))
 
 
 if __name__ == "__main__":
