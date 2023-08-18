@@ -67,9 +67,9 @@ def ask_question(event, vk_api, questions, redis_db):
         msg_text = f'Повторяю вопрос\n\n:{question}'
     else:
         question = random.choice(questions)
-        redis_db.set(f'{event.user_id}_{QUESTION}', question['q'])
-        redis_db.set(f'{event.user_id}_{RIGHT_ANSWER}', question['a'])
-        msg_text = question['q']
+        redis_db.set(f'{event.user_id}_{QUESTION}', question[0])
+        redis_db.set(f'{event.user_id}_{RIGHT_ANSWER}', question[1])
+        msg_text = question[0]
     vk_api.messages.send(
         user_id=event.user_id,
         message=msg_text,
@@ -118,7 +118,7 @@ def main():
     longpoll = VkLongPoll(vk_session)
 
     with open('quiz.json', 'r', encoding='UTF-8') as file:
-        questions: list = list(json.load(file).values())
+        questions: list = list(json.load(file).items())
 
     redis_db =  redis.Redis(host=os.environ['REDIS_HOST'], port=os.environ['REDIS_PORT'], password=os.environ['REDIS_PASSWORD'])
 

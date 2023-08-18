@@ -21,14 +21,12 @@ def make_json_file():
             file_contents = file_io.read()
         splitted_file = file_contents.split('\n\n')
 
-        i = 0
         for block in splitted_file:
             block = block.strip('\n')
             if block.startswith('Вопрос'):
                 question_splitted = block.split('\n')
                 del question_splitted[0]
                 question = ' '.join(question_splitted)
-                i += 1
             elif block.startswith('Ответ'):
                 if not question:
                     print(block)
@@ -36,7 +34,7 @@ def make_json_file():
                 answer_splitted = block.split('\n')
                 del answer_splitted[0]
                 answer = ' '.join(answer_splitted)
-                questions[f'question_{i}'] = {'q':question, 'a':answer}
+                questions[question] = answer
                 question = None
 
     with open('quiz.json', 'w', encoding='UTF-8') as file:

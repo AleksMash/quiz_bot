@@ -64,10 +64,10 @@ def start(update: Update, context: CallbackContext):
 def new_question(update: Update, context: CallbackContext):
     question = random.choice(context.bot_data['questions'])
     context.user_data[CURRENT_STAGE] = ANSWER_QUESTION
-    update.message.reply_text(question['q'])
+    update.message.reply_text(question[0])
     update.message.reply_text('Введите  ответ', reply_markup=CANCEL_MARKUP)
-    context.bot_data['redis'].set(f'{update.message.from_user.id}_q', question['q'])
-    context.bot_data['redis'].set(f'{update.message.from_user.id}_a', question['a'])
+    context.bot_data['redis'].set(f'{update.message.from_user.id}_q', question[0])
+    context.bot_data['redis'].set(f'{update.message.from_user.id}_a', question[1])
     return ANSWER_QUESTION
 
 
@@ -98,7 +98,7 @@ def main():
     dispatcher: Dispatcher = updater.dispatcher
 
     with open('quiz.json', 'r', encoding='UTF-8') as file:
-        dispatcher.bot_data['questions'] = list(json.load(file).values())
+        dispatcher.bot_data['questions'] = list(json.load(file).items())
 
     dispatcher.bot_data['redis'] = redis.Redis(host=os.environ['REDIS_HOST'],
                                                port=os.environ['REDIS_PORT'], password=os.environ['REDIS_PASSWORD'])
