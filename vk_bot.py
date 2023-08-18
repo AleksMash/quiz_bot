@@ -49,14 +49,6 @@ KEYBOARDS = {
 }
 
 
-def get_user_cache(redis_db, user_id, data_id):
-    return redis_db.get(f'{user_id}_{data_id}').decode('UTF-8')
-
-
-def set_user_cache(redis_db, user_id, data_id, value):
-    return redis_db.set(f'{user_id}_{data_id}', value)
-
-
 def start(event, vk_api, questions, redis_db, text=None):
     vk_api.messages.send(
         user_id=event.user_id,
@@ -64,19 +56,19 @@ def start(event, vk_api, questions, redis_db, text=None):
         random_id=random.randint(1, 1000),
         keyboard=KEYBOARDS[KEYBOARD_MAIN]
     )
-    set_user_cache(redis_db, event.user_id, CURRENT_KEYBOARD, KEYBOARD_MAIN)
+    redis_db.set(f'{event.user_id}_{CURRENT_KEYBOARD}', KEYBOARD_MAIN)
     return Stages.START_POINT
 
 
 def ask_question(event, vk_api, questions, redis_db):
-    current_stage = int(get_user_cache(redis_db, event.user_id, CURRENT_STAGE))
+    current_stage = redis_db.get(f'{event.user_id}_{CURRENT_STAGE}').decode('UTF-8')
     if current_stage == Stages.TRY_AGAIN_YES_OR_NO:
-        question = get_user_cache(redis_db, event.user_id, QUESTION)
+        question = redis_db.get(f'{event.user_id}_{QUESTION}').decode('UTF-8')
         msg_text = f'Повторяю вопрос\n\n:{question}'
     else:
         question = random.choice(questions)
-        set_user_cache(redis_db, event.user_id, QUESTION, question['q'])
-        set_user_cache(redis_db, event.user_id, RIGHT_ANSWER, question['a'])
+        redis_db.set(f'{event.user_id}_{QUESTION}', question['q'])
+        redis_db.set(f'{event.user_id}_{RIGHT_ANSWER}', question['a'])
         msg_text = question['q']
     vk_api.messages.send(
         user_id=event.user_id,
@@ -84,12 +76,12 @@ def ask_question(event, vk_api, questions, redis_db):
         random_id=random.randint(1, 1000),
         keyboard=KEYBOARDS[KEYBOARD_GIVE_UP]
     )
-    set_user_cache(redis_db, event.user_id, CURRENT_KEYBOARD, KEYBOARD_GIVE_UP)
+    redis_db.set(f'{event.user_id}_{CURRENT_KEYBOARD}',KEYBOARD_GIVE_UP)
     return Stages.WAIT_FOR_ANSWER
 
 
 def process_answer(event, vk_api, questions, redis_db):
-    question = get_user_cache(redis_db, event.user_id, QUESTION)
+    question = redis_db.get(f'{event.user_id}_{QUESTION}')
     if fuzz.WRatio(question, event.text) >= 70:
         return start(event, vk_api, 'Все верно! Для нового вопроса нажми кнопку "Новый вопрос"')
     vk_api.messages.send(
@@ -98,18 +90,18 @@ def process_answer(event, vk_api, questions, redis_db):
         random_id=random.randint(1, 1000),
         keyboard=KEYBOARDS[KEYBOARD_YES_NO]
     )
-    set_user_cache(redis_db, event.user_id, CURRENT_KEYBOARD, KEYBOARD_YES_NO)
+    redis_db.set(f'{event.user_id}_{CURRENT_KEYBOARD}', KEYBOARD_YES_NO)
     return Stages.TRY_AGAIN_YES_OR_NO
 
 
 def give_up(event, vk_api, questions, redis_db):
-    right_answer = get_user_cache(redis_db, event.user_id, RIGHT_ANSWER)
+    right_answer = redis_db.get(f'{event.user_id}_{RIGHT_ANSWER}')
     send_message(event, vk_api, f'Правильный ответ:\n\n{right_answer}', redis_db)
     return start(event, vk_api, questions, redis_db)
 
 
 def send_message(event, vk_api, text, redis_db):
-    current_keyboard = int(get_user_cache(redis_db, event.user_id, CURRENT_KEYBOARD))
+    current_keyboard = redis_db.get(f'{event.user_id}_{CURRENT_KEYBOARD}')
     vk_api.messages.send(
         user_id=event.user_id,
         message=text,
@@ -145,10 +137,10 @@ def main():
     # start message listening
     for event in longpoll.listen():
         if event.type == VkEventType.MESSAGE_NEW and event.to_me:
-            current_stage = int(get_user_cache(redis_db, event.user_id, CURRENT_STAGE))
+            current_stage = redis_db.get(f'{event.user_id}_{CURRENT_STAGE}')
             if not current_stage:
                 current_stage = start(event, vk_api, text='Выбери действие:', redis_db=redis_db)
-                set_user_cache(event.user_id, CURRENT_STAGE, current_stage)
+                redis_db.set(f'{event.user_id}_{CURRENT_STAGE}',current_stage)
                 continue
             stage_callbacks = callbacks.get(current_stage)
             if not stage_callbacks:
@@ -156,7 +148,7 @@ def main():
                                                            " Передай это сообщение разработчику. А пока попробуем"
                                                            " начать все сначала\n"
                                                            "Выбери действие:", redis_db=redis_db)
-                set_user_cache(redis_db, event.user_id, CURRENT_STAGE, current_stage)
+                redis_db.set(f'{event.user_id}_{CURRENT_STAGE}', current_stage)
                 continue
             func = stage_callbacks.get(event.text)
             if not func:
@@ -165,7 +157,7 @@ def main():
                     send_message(event, vk_api, 'Команда не распознана или не активна на текущем шаге.'
                                                 ' Выбери другую кнопку', redis_db)
                     continue
-            set_user_cache(redis_db, event.user_id, CURRENT_STAGE, func(event, vk_api, questions, redis_db))
+            redis_db.set(f'{event.user_id}_{CURRENT_STAGE}', func(event, vk_api, questions, redis_db))
 
 
 if __name__ == "__main__":
