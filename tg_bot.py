@@ -45,7 +45,7 @@ KEYBOARD_YES_NO = ReplyKeyboardMarkup(
 
 def process_user_answer(update: Update, context: CallbackContext):
     if context.user_data[CURRENT_STAGE] == ANSWER_QUESTION:
-        right_answer = context.bot_data['redis'].get(f'{update.message.from_user.id}_a')
+        right_answer = context.bot_data['redis'].get(f'{update.message.from_user.id}_a').decode('UTF-8')
         # Вес 70 применен эмпирически
         if fuzz.WRatio(update.message.text, right_answer)>=70:
             update.message.reply_text("Правильно! Поздравляю! Для следующего вопроса нажми \"Новый вопрос\"",
